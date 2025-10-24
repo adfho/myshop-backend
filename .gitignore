@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+
+venv/
+
+app.db
+*sqlite3
+
+static/avatars/*
