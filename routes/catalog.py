@@ -5,6 +5,24 @@ catalog_bp = Blueprint("catalog", __name__)
 
 @catalog_bp.route("/products", methods=["GET"])
 def list_products():
+    """
+    Получение списка товаров с фильтрацией и сортировкой.
+    
+    Параметры запроса (query string):
+    - q (опционально, строка) - Поисковый запрос (поиск по названию товара)
+    - category (опционально, число) - ID категории для фильтрации
+    - min_price (опционально, число) - Минимальная цена товара
+    - max_price (опционально, число) - Максимальная цена товара
+    - sort (опционально, строка) - Тип сортировки: price_asc, price_desc, title_asc, title_desc, id_desc
+    - page (опционально, число) - Номер страницы (по умолчанию 1)
+    - per_page (опционально, число) - Товаров на странице (по умолчанию 12)
+    
+    Применяет фильтры по поисковому запросу, категории и цене, сортирует товары,
+    возвращает пагинированный список.
+    
+    Returns:
+        JSON ответ с items (список товаров), total, page, pages (200)
+    """
     # параметры: ?q=search&category=1&min_price=10&max_price=100&sort=price_asc&page=1&per_page=10
     q = request.args.get("q", type=str)
     category = request.args.get("category", type=int)
@@ -56,11 +74,28 @@ def list_products():
 
 @catalog_bp.route("/categories", methods=["GET"])
 def list_categories():
+    """
+    Получение списка всех категорий товаров.
+    
+    Возвращает все категории из базы данных с их ID и названиями.
+    
+    Returns:
+        JSON массив категорий с полями id и name (200)
+    """
     cats = Category.query.all()
     return jsonify([{"id":c.id,"name":c.name} for c in cats]), 200
 
 @catalog_bp.route("/products/<int:product_id>", methods=["GET"])
 def product_detail(product_id):
+    """
+    Получение детальной информации о конкретном товаре.
+    
+    Args:
+        product_id (int): ID товара
+        
+    Returns:
+        JSON объект с полными данными товара (200) или ошибка 404 если товар не найден
+    """
     p = Product.query.get(product_id)
     if not p:
         return jsonify({"msg":"Product not found"}), 404

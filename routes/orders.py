@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Order, OrderItem, Product, User
+from models import db, Order, OrderItem, Product, User, Notification
 from routes.cart import read_cart_from_cookie
 
 orders_bp = Blueprint("orders", __name__)
@@ -8,6 +8,21 @@ orders_bp = Blueprint("orders", __name__)
 @orders_bp.route("/create", methods=["POST"])
 @jwt_required()
 def create_order():
+    """
+    Создание заказа из текущей корзины.
+    
+    Требует JWT токен. Берет товары из корзины (cookie), для каждого товара:
+    - Проверяет наличие в БД
+    - Ограничивает количество по stock (остаток на складе)
+    - Рассчитывает общую сумму заказа
+    - Создает записи Order и OrderItem в БД
+    - Уменьшает stock товаров на складе
+    - Создает уведомление о создании заказа
+    - Очищает корзину (удаляет cookie)
+    
+    Returns:
+        JSON ответ с order_id (201) или ошибкой (400, 401, 404)
+    """
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
@@ -42,6 +57,14 @@ def create_order():
         # уменьшить stock если нужно
         if product.stock is not None:
             product.stock = max(0, product.stock - qty)
+    # создать уведомление о создании заказа
+    notification = Notification(
+        user_id=user_id,
+        title="Заказ создан",
+        message=f"Ваш заказ #{order.id} на сумму {total:.2f} успешно создан",
+        type="success"
+    )
+    db.session.add(notification)
     db.session.commit()
 
     # очистить cookie корзины — фронтенд должен удалить cookie или сервер может отправить инструкцию
@@ -52,6 +75,17 @@ def create_order():
 @orders_bp.route("/my", methods=["GET"])
 @jwt_required()
 def my_orders():
+    """
+    Получение истории заказов текущего пользователя.
+    
+    Требует JWT токен. Получает все заказы пользователя, сортирует их
+    по дате создания (от новых к старым), для каждого заказа формирует
+    список позиций (OrderItem) с данными товаров.
+    
+    Returns:
+        JSON массив заказов с полями id, created_at, total, status, items (200)
+        или ошибка авторизации (401)
+    """
     user_id = get_jwt_identity()
     orders = Order.query.filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
     data = []

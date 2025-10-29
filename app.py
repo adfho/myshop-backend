@@ -6,6 +6,21 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
 def create_app():
+    """
+    Фабрика приложения Flask.
+    
+    Создает и настраивает Flask приложение:
+    - Инициализирует конфигурацию из Config
+    - Создает папку для загрузки аватаров
+    - Подключает базу данных (SQLAlchemy)
+    - Настраивает JWT для аутентификации
+    - Настраивает CORS для работы с фронтендом (разрешает cookies)
+    - Регистрирует все маршруты API (auth, catalog, cart, orders)
+    - Создает все таблицы в базе данных если их нет
+    
+    Returns:
+        Flask: Настроенное Flask приложение
+    """
     app = Flask(__name__)
     app.config.from_object(Config)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
