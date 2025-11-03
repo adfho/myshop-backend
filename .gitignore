@@ -5,8 +5,31 @@ __pycache__/
 *.swp
 
 venv/
+.venv/
+env/
+.env
 
 app.db
-*sqlite3
+*.sqlite3
+*.db
 
 static/avatars/*
+
+# Миграции (опционально - можно коммитить)
+# migrations/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment files
+.env
+.env.local
+.env.production

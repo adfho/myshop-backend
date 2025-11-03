@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app, send_from_directory
 from models import db, User, Notification
-from routes.utils import save_avatar, allowed_file, validate_email, validate_password
+from routes.utils import save_avatar, validate_email, validate_password
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-import os
 
 auth_bp = Blueprint("auth", __name__)
 

@@ -1,6 +1,6 @@
 import os
 import re
-from flask import current_app, jsonify
+from flask import current_app
 from werkzeug.utils import secure_filename
 from uuid import uuid4
 

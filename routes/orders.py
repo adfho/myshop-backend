@@ -1,5 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from decimal import Decimal
 from models import db, Order, OrderItem, Product, User, Notification
 from routes.cart import read_cart_from_cookie
 
@@ -32,7 +33,7 @@ def create_order():
     if not cart:
         return jsonify({"msg":"Cart empty"}), 400
 
-    total = 0.0
+    total = Decimal('0.00')
     items = []
     for pid, qty in cart.items():
         product = Product.query.get(pid)
@@ -40,18 +41,22 @@ def create_order():
             continue
         if product.stock is not None and qty > product.stock:
             qty = product.stock
-        line_total = product.price * qty
+        # Преобразуем цену в Decimal если это не Decimal
+        price = Decimal(str(product.price))
+        line_total = price * qty
         total += line_total
-        items.append((product, qty, product.price))
+        items.append((product, qty, price))
 
     if not items:
         return jsonify({"msg":"No valid items to order"}), 400
 
-    order = Order(user_id=user_id, total=round(total, 2))
+    # Округляем до 2 знаков после запятой для сохранения в БД
+    order = Order(user_id=user_id, total=total.quantize(Decimal('0.01')))
     db.session.add(order)
     db.session.flush()  # получить id
 
     for product, qty, price in items:
+        # Сохраняем цену как Decimal (Numeric в БД)
         oi = OrderItem(order_id=order.id, product_id=product.id, quantity=qty, price=price)
         db.session.add(oi)
         # уменьшить stock если нужно
@@ -94,12 +99,12 @@ def my_orders():
             "product_id": it.product_id,
             "title": it.product.title,
             "quantity": it.quantity,
-            "price": it.price
+            "price": float(it.price) if isinstance(it.price, Decimal) else it.price
         } for it in o.items]
         data.append({
             "id": o.id,
             "created_at": o.created_at.isoformat(),
-            "total": o.total,
+            "total": float(o.total) if isinstance(o.total, Decimal) else o.total,
             "status": o.status,
             "items": items
         })

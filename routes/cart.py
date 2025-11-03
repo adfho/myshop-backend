@@ -1,18 +1,31 @@
-from flask import Blueprint, request, jsonify, make_response
+from flask import Blueprint, request, jsonify, make_response, current_app
 import json
-from models import Product
 from decimal import Decimal
+from models import Product
 from routes.utils import validate_integer
+from itsdangerous import URLSafeSerializer, BadSignature
 
 cart_bp = Blueprint("cart", __name__)
 
+def get_cookie_signer():
+    """
+    Создает подписанный сериализатор для cookie.
+    Использует SECRET_KEY из конфига для подписи.
+    
+    Returns:
+        URLSafeSerializer: Сериализатор для подписи cookie
+    """
+    secret_key = current_app.config.get("SECRET_KEY")
+    return URLSafeSerializer(secret_key)
+
 def read_cart_from_cookie():
     """
-    Читает корзину покупок из cookie браузера.
+    Читает корзину покупок из подписанного cookie браузера.
     
-    Извлекает cookie с именем "cart", парсит JSON строку в словарь,
-    преобразует ключи и значения в целые числа (product_id -> quantity).
-    Если cookie нет или произошла ошибка парсинга, возвращает пустой словарь.
+    Извлекает подписанное cookie с именем "cart", проверяет подпись,
+    парсит JSON строку в словарь, преобразует ключи и значения в целые числа.
+    Если cookie нет, подпись неверна или произошла ошибка парсинга,
+    возвращает пустой словарь.
     
     Returns:
         dict: Словарь {product_id: quantity} или {} если корзина пуста/ошибка
@@ -21,13 +34,45 @@ def read_cart_from_cookie():
     if not cart_cookie:
         return {}
     try:
-        data = json.loads(cart_cookie)
+        signer = get_cookie_signer()
+        # Десериализуем с проверкой подписи
+        cart_json = signer.loads(cart_cookie)
+        data = json.loads(cart_json)
         if isinstance(data, dict):
             # привести ключи к int
             return {int(k): int(v) for k, v in data.items()}
-    except Exception:
+    except (BadSignature, ValueError, TypeError, json.JSONDecodeError):
+        # Неверная подпись или ошибка парсинга - возвращаем пустую корзину
         return {}
     return {}
+
+def set_cart_cookie(response, cart_dict):
+    """
+    Устанавливает подписанное cookie с корзиной.
+    
+    Сериализует корзину в JSON, подписывает её и устанавливает в cookie
+    с флагами HttpOnly, SameSite и Secure (в проде).
+    
+    Args:
+        response: Response объект Flask
+        cart_dict (dict): Словарь корзины {product_id: quantity}
+    """
+    cart_json = json.dumps(cart_dict)
+    signer = get_cookie_signer()
+    signed_value = signer.dumps(cart_json)
+    
+    # Настройки cookie
+    cookie_kwargs = {
+        "httponly": True,  # Защита от XSS - JavaScript не может прочитать cookie
+        "samesite": "Lax",  # Защита от CSRF
+        "max_age": 86400 * 30  # 30 дней
+    }
+    
+    # В проде добавляем Secure флаг (только HTTPS)
+    if current_app.config.get("IS_PRODUCTION", False):
+        cookie_kwargs["secure"] = True
+    
+    response.set_cookie("cart", signed_value, **cookie_kwargs)
 
 def cart_response(cart_dict):
     """
@@ -40,6 +85,7 @@ def cart_response(cart_dict):
     - Подсчитывает общее количество товаров
     
     Товары, которые не найдены в БД, игнорируются.
+    Использует Decimal для точных денежных расчетов.
     
     Args:
         cart_dict (dict): Словарь {product_id: quantity}
@@ -49,24 +95,29 @@ def cart_response(cart_dict):
     """
     # соберём подробный ответ: items, subtotal, total, count
     items = []
-    subtotal = 0.0
+    subtotal = Decimal('0.00')
     for pid, qty in cart_dict.items():
         product = Product.query.get(pid)
         if not product:
             continue
+        # Преобразуем цену в Decimal если это не Decimal
+        price = Decimal(str(product.price))
+        quantity = int(qty)
+        line_total = price * quantity
+        
         line = {
             "product_id": pid,
             "title": product.title,
-            "price": product.price,
-            "quantity": qty,
-            "line_total": round(product.price * qty, 2)
+            "price": float(price),  # Для JSON сериализации
+            "quantity": quantity,
+            "line_total": float(line_total)
         }
-        subtotal += product.price * qty
+        subtotal += line_total
         items.append(line)
     return {
         "items": items,
-        "subtotal": round(subtotal, 2),
-        "total": round(subtotal, 2),  # можно добавить доставку/налоги
+        "subtotal": float(subtotal.quantize(Decimal('0.01'))),
+        "total": float(subtotal.quantize(Decimal('0.01'))),  # можно добавить доставку/налоги
         "count": sum([i['quantity'] for i in items])
     }
 
@@ -126,7 +177,7 @@ def add_to_cart():
     if product.stock is not None and cart[pid] > product.stock:
         cart[pid] = product.stock
     resp = make_response(jsonify(cart_response(cart)), 200)
-    resp.set_cookie("cart", json.dumps(cart), httponly=False, samesite="Lax")
+    set_cart_cookie(resp, cart)
     return resp
 
 @cart_bp.route("/remove", methods=["POST"])
@@ -155,7 +206,7 @@ def remove_from_cart():
     if pid in cart:
         cart.pop(pid)
     resp = make_response(jsonify(cart_response(cart)), 200)
-    resp.set_cookie("cart", json.dumps(cart), httponly=False, samesite="Lax")
+    set_cart_cookie(resp, cart)
     return resp
 
 @cart_bp.route("/update", methods=["POST"])
@@ -199,5 +250,5 @@ def update_cart():
             qty = product.stock
         cart[pid] = qty
     resp = make_response(jsonify(cart_response(cart)), 200)
-    resp.set_cookie("cart", json.dumps(cart), httponly=False, samesite="Lax")
+    set_cart_cookie(resp, cart)
     return resp

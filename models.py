@@ -13,7 +13,9 @@ class User(db.Model):
     avatar = db.Column(db.String(300))  # путь к файлу в static/avatars
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     orders = db.relationship("Order", backref="user", lazy=True)
-    notifications = db.relationship("Notification", backref="user", lazy=True, cascade="all, delete-orphan")
+    notifications = db.relationship(
+        "Notification", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
 
     def set_password(self, password):
         """
@@ -45,7 +47,8 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False, index=True)
     description = db.Column(db.Text)
-    price = db.Column(db.Float, nullable=False)
+    # Используем Numeric(10, 2) вместо Float для точных денежных расчетов
+    price = db.Column(db.Numeric(10, 2), nullable=False)
     stock = db.Column(db.Integer, default=0)
     image = db.Column(db.String(300))  # путь или URL
     category_id = db.Column(db.Integer, db.ForeignKey("category.id"), nullable=True)
@@ -54,7 +57,8 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    total = db.Column(db.Float, nullable=False)
+    # Используем Numeric(10, 2) вместо Float для точных денежных расчетов
+    total = db.Column(db.Numeric(10, 2), nullable=False)
     items = db.relationship("OrderItem", backref="order", lazy=True)
     status = db.Column(db.String(50), default="created")  # created, paid, shipped, cancelled
 
@@ -63,7 +67,8 @@ class OrderItem(db.Model):
     order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
-    price = db.Column(db.Float, nullable=False)  # price at time of order
+    # Используем Numeric(10, 2) вместо Float для точных денежных расчетов
+    price = db.Column(db.Numeric(10, 2), nullable=False)  # price at time of order
     product = db.relationship("Product")
 
 class Notification(db.Model):

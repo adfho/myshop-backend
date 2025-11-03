@@ -4,6 +4,7 @@ from config import Config
 from models import db
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
+from flask_migrate import Migrate
 
 def create_app():
     """
@@ -26,7 +27,10 @@ def create_app():
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     db.init_app(app)
-    jwt = JWTManager(app)
+    # Инициализация Flask-Migrate (не сохраняем в переменную, используется для регистрации)
+    Migrate(app, db)
+    # Инициализация JWT (не сохраняем в переменную, используется для регистрации)
+    JWTManager(app)
     CORS(app, supports_credentials=True)  # разрешаем куки/credentials если фронтенд с другим origin
 
     # импорт и регистрация роутов
@@ -39,9 +43,8 @@ def create_app():
     app.register_blueprint(cart_bp, url_prefix="/api/cart")
     app.register_blueprint(orders_bp, url_prefix="/api/orders")
 
-    # создать БД если не существует
-    with app.app_context():
-        db.create_all()
+    # НЕ создаём БД автоматически - используем миграции Flask-Migrate
+    # Для инициализации: flask db init, flask db migrate, flask db upgrade
 
     return app
 

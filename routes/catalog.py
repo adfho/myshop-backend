@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from models import db, Product, Category
+from models import Product, Category
 
 catalog_bp = Blueprint("catalog", __name__)
 
@@ -13,7 +13,8 @@ def list_products():
     - category (опционально, число) - ID категории для фильтрации
     - min_price (опционально, число) - Минимальная цена товара
     - max_price (опционально, число) - Максимальная цена товара
-    - sort (опционально, строка) - Тип сортировки: price_asc, price_desc, title_asc, title_desc, id_desc
+    - sort (опционально, строка) - Тип сортировки:
+      price_asc, price_desc, title_asc, title_desc, id_desc
     - page (опционально, число) - Номер страницы (по умолчанию 1)
     - per_page (опционально, число) - Товаров на странице (по умолчанию 12)
     
@@ -23,7 +24,8 @@ def list_products():
     Returns:
         JSON ответ с items (список товаров), total, page, pages (200)
     """
-    # параметры: ?q=search&category=1&min_price=10&max_price=100&sort=price_asc&page=1&per_page=10
+    # параметры: ?q=search&category=1&min_price=10&max_price=100
+    # &sort=price_asc&page=1&per_page=10
     q = request.args.get("q", type=str)
     category = request.args.get("category", type=int)
     min_price = request.args.get("min_price", type=float)
