@@ -26,3 +26,21 @@ class Config:
     UPLOAD_FOLDER = os.path.join(basedir, "static", "avatars")
     MAX_CONTENT_LENGTH = 2 * 1024 * 1024  # 2MB max avatar
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
+
+    APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")
+
+    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+    LOG_DIR = os.environ.get("LOG_DIR", os.path.join(basedir, "logs"))
+    LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", 5 * 1024 * 1024))
+    LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", 5))
+
+    RATE_LIMIT_GENERAL = os.environ.get("RATE_LIMIT_GENERAL", "300 per minute")
+    RATE_LIMIT_DEFAULT = os.environ.get("RATE_LIMIT_DEFAULT", RATE_LIMIT_GENERAL)
+    RATE_LIMIT_AUTH = os.environ.get("RATE_LIMIT_AUTH", "5 per minute")
+    RATE_LIMIT_STORAGE_URI = os.environ.get("RATE_LIMIT_STORAGE_URI", "memory://")
+    RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "true").lower() == "true"
+
+    # Кэширование
+    CACHE_TYPE = os.environ.get("CACHE_TYPE", "SimpleCache")
+    CACHE_DEFAULT_TIMEOUT = int(os.environ.get("CACHE_DEFAULT_TIMEOUT", 300))  # 5 минут
+    CACHE_REDIS_URL = os.environ.get("CACHE_REDIS_URL")  # redis://localhost:6379/0

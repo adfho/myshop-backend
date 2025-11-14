@@ -1,9 +1,13 @@
-from flask import Blueprint, request, jsonify
-from models import Product, Category
+from flask import Blueprint, request, jsonify, current_app
+from models import Product, Category, db
+from sqlalchemy.orm import selectinload
+from errors import NotFoundError
+from extensions import cache
 
 catalog_bp = Blueprint("catalog", __name__)
 
 @catalog_bp.route("/products", methods=["GET"])
+@cache.cached(timeout=60, query_string=True)  # Кэш на 1 минуту с учетом query параметров
 def list_products():
     """
     Получение списка товаров с фильтрацией и сортировкой.
@@ -34,7 +38,7 @@ def list_products():
     page = request.args.get("page", default=1, type=int)
     per_page = request.args.get("per_page", default=12, type=int)
 
-    query = Product.query
+    query = Product.query.options(selectinload(Product.category))
 
     if q:
         query = query.filter(Product.title.ilike(f"%{q}%"))
@@ -64,7 +68,8 @@ def list_products():
         "price": p.price,
         "stock": p.stock,
         "image": p.image,
-        "category_id": p.category_id
+        "category_id": p.category_id,
+        "category_name": p.category.name if p.category else None
     } for p in pag.items]
 
     return jsonify({
@@ -75,11 +80,13 @@ def list_products():
     }), 200
 
 @catalog_bp.route("/categories", methods=["GET"])
+@cache.cached(timeout=300, key_prefix="categories_list")  # Кэш на 5 минут
 def list_categories():
     """
     Получение списка всех категорий товаров.
     
     Возвращает все категории из базы данных с их ID и названиями.
+    Результат кэшируется на 5 минут.
     
     Returns:
         JSON массив категорий с полями id и name (200)
@@ -98,9 +105,13 @@ def product_detail(product_id):
     Returns:
         JSON объект с полными данными товара (200) или ошибка 404 если товар не найден
     """
-    p = Product.query.get(product_id)
+    p = (
+        Product.query.options(selectinload(Product.category))
+        .filter_by(id=product_id)
+        .first()
+    )
     if not p:
-        return jsonify({"msg":"Product not found"}), 404
+        raise NotFoundError("Product not found")
     return jsonify({
         "id": p.id,
         "title": p.title,
@@ -108,5 +119,6 @@ def product_detail(product_id):
         "price": p.price,
         "stock": p.stock,
         "image": p.image,
-        "category_id": p.category_id
+        "category_id": p.category_id,
+        "category_name": p.category.name if p.category else None
     }), 200

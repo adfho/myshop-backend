@@ -1,0 +1,8 @@
+This directory contains Alembic migrations managed by Flask-Migrate.
+
+To create a new migration:
+
+1. Set `FLASK_APP=app.py`
+2. Run `flask db migrate -m "description"`
+3. Apply with `flask db upgrade`
+

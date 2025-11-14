@@ -5,7 +5,7 @@
 
 def test_list_products(client, test_products):
     """Тест получения списка товаров."""
-    response = client.get('/api/catalog/products')
+    response = client.get('/api/v1/catalog/products')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -18,7 +18,7 @@ def test_list_products(client, test_products):
 def test_list_products_with_filter(client, test_products, test_category):
     """Тест фильтрации товаров по категории."""
     category_id = test_category if isinstance(test_category, int) else test_category.id
-    response = client.get(f'/api/catalog/products?category={category_id}')
+    response = client.get(f'/api/v1/catalog/products?category={category_id}')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -29,7 +29,7 @@ def test_list_products_with_filter(client, test_products, test_category):
 
 def test_list_products_price_filter(client, test_products):
     """Тест фильтрации по цене."""
-    response = client.get('/api/catalog/products?min_price=300&max_price=500')
+    response = client.get('/api/v1/catalog/products?min_price=300&max_price=500')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -39,7 +39,7 @@ def test_list_products_price_filter(client, test_products):
 
 def test_list_products_search(client, test_products):
     """Тест поиска товаров."""
-    response = client.get('/api/catalog/products?q=smartphone')
+    response = client.get('/api/v1/catalog/products?q=smartphone')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -49,7 +49,7 @@ def test_list_products_search(client, test_products):
 
 def test_list_products_pagination(client, test_products):
     """Тест пагинации."""
-    response = client.get('/api/catalog/products?page=1&per_page=1')
+    response = client.get('/api/v1/catalog/products?page=1&per_page=1')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -59,7 +59,7 @@ def test_list_products_pagination(client, test_products):
 
 def test_list_categories(client, test_category):
     """Тест получения списка категорий."""
-    response = client.get('/api/catalog/categories')
+    response = client.get('/api/v1/catalog/categories')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -72,7 +72,7 @@ def test_product_detail(client, test_products, app):
     """Тест получения деталей товара."""
     from models import Product
     product_id = test_products[0] if isinstance(test_products[0], int) else test_products[0].id
-    response = client.get(f'/api/catalog/products/{product_id}')
+    response = client.get(f'/api/v1/catalog/products/{product_id}')
     
     assert response.status_code == 200
     data = response.get_json()
@@ -86,9 +86,10 @@ def test_product_detail(client, test_products, app):
 
 def test_product_detail_not_found(client):
     """Тест получения несуществующего товара."""
-    response = client.get('/api/catalog/products/99999')
+    response = client.get('/api/v1/catalog/products/99999')
     
     assert response.status_code == 404
     data = response.get_json()
-    assert 'not found' in data['msg'].lower()
+    assert data['error']['type'] == 'not_found'
+    assert 'not found' in data['error']['message'].lower()
 

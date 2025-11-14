@@ -1,6 +1,8 @@
 # API Документация
 
-Базовый URL: `http://localhost:5000/api`
+Базовый URL: `http://localhost:5000/api/v1`
+
+**Версия API:** v1
 
 ## Аутентификация
 
@@ -11,9 +13,9 @@ Authorization: Bearer <token>
 
 ---
 
-## 🔐 Авторизация (`/api/auth`)
+## 🔐 Авторизация (`/api/v1/auth`)
 
-### POST `/api/auth/register`
+### POST `/api/v1/auth/register`
 Регистрация нового пользователя.
 
 **Формат запроса:** `multipart/form-data`
@@ -27,7 +29,7 @@ Authorization: Bearer <token>
 
 **Пример запроса:**
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST http://localhost:5000/api/v1/auth/register \
   -F "first_name=Иван" \
   -F "last_name=Иванов" \
   -F "email=ivan@example.com" \
@@ -44,12 +46,52 @@ curl -X POST http://localhost:5000/api/auth/register \
 ```
 
 **Ошибки:**
-- `400` - Недостающие поля или невалидные данные
-- `409` - Пользователь с таким email уже существует
+
+**422 - Ошибка валидации:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Invalid email format",
+    "details": {
+      "email": ["Invalid email format"]
+    }
+  }
+}
+```
+
+**422 - Короткий пароль:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Password must be at least 6 characters and contain letters and numbers",
+    "details": {
+      "password": ["Password must be at least 6 characters and contain letters and numbers"]
+    }
+  }
+}
+```
+
+**409 - Пользователь уже существует:**
+```json
+{
+  "error": {
+    "type": "conflict",
+    "message": "User already exists"
+  }
+}
+```
+
+**Edge Cases:**
+- Пустые поля `first_name` или `last_name` → 422
+- Email без домена (например, `test@`) → 422
+- Пароль менее 6 символов → 422
+- Дублирование email → 409
 
 ---
 
-### POST `/api/auth/login`
+### POST `/api/v1/auth/login`
 Вход в систему и получение JWT-токена.
 
 **Формат запроса:** `application/json`
@@ -64,7 +106,7 @@ curl -X POST http://localhost:5000/api/auth/register \
 
 **Пример запроса:**
 ```bash
-curl -X POST http://localhost:5000/api/auth/login \
+curl -X POST http://localhost:5000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"ivan@example.com","password":"password123"}'
 ```
@@ -84,19 +126,42 @@ curl -X POST http://localhost:5000/api/auth/login \
 ```
 
 **Ошибки:**
-- `400` - Недостающие поля или невалидный email
-- `401` - Неверный email или пароль
+
+**422 - Ошибка валидации:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Invalid email format"
+  }
+}
+```
+
+**401 - Неверные учетные данные:**
+```json
+{
+  "error": {
+    "type": "unauthorized",
+    "message": "Bad email or password"
+  }
+}
+```
+
+**Edge Cases:**
+- Несуществующий email → 401
+- Неверный пароль → 401
+- Отсутствие поля `email` или `password` → 422
 
 ---
 
-### GET `/api/auth/me`
+### GET `/api/v1/auth/me`
 Получение информации о текущем пользователе.
 
 **Требуется авторизация:** Да
 
 **Пример запроса:**
 ```bash
-curl -X GET http://localhost:5000/api/auth/me \
+curl -X GET http://localhost:5000/api/v1/auth/me \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -118,7 +183,7 @@ curl -X GET http://localhost:5000/api/auth/me \
 
 ---
 
-### GET `/api/auth/notifications`
+### GET `/api/v1/auth/notifications`
 Получение списка уведомлений пользователя.
 
 **Требуется авторизация:** Да
@@ -129,7 +194,7 @@ curl -X GET http://localhost:5000/api/auth/me \
 
 **Пример запроса:**
 ```bash
-curl -X GET "http://localhost:5000/api/auth/notifications?unread_only=true&limit=10" \
+curl -X GET "http://localhost:5000/api/v1/auth/notifications?unread_only=true&limit=10" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -149,14 +214,14 @@ curl -X GET "http://localhost:5000/api/auth/notifications?unread_only=true&limit
 
 ---
 
-### PUT `/api/auth/notifications/<notification_id>/read`
+### PUT `/api/v1/auth/notifications/<notification_id>/read`
 Отметить уведомление как прочитанное.
 
 **Требуется авторизация:** Да
 
 **Пример запроса:**
 ```bash
-curl -X PUT http://localhost:5000/api/auth/notifications/1/read \
+curl -X PUT http://localhost:5000/api/v1/auth/notifications/1/read \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -169,14 +234,14 @@ curl -X PUT http://localhost:5000/api/auth/notifications/1/read \
 
 ---
 
-### PUT `/api/auth/notifications/read-all`
+### PUT `/api/v1/auth/notifications/read-all`
 Отметить все уведомления как прочитанные.
 
 **Требуется авторизация:** Да
 
 **Пример запроса:**
 ```bash
-curl -X PUT http://localhost:5000/api/auth/notifications/read-all \
+curl -X PUT http://localhost:5000/api/v1/auth/notifications/read-all \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -189,19 +254,21 @@ curl -X PUT http://localhost:5000/api/auth/notifications/read-all \
 
 ---
 
-### GET `/api/auth/avatar/<filename>`
+### GET `/api/v1/auth/avatar/<filename>`
 Получение файла аватара пользователя.
 
 **Пример запроса:**
 ```bash
-curl -X GET http://localhost:5000/api/auth/avatar/abc123_avatar.jpg
+curl -X GET http://localhost:5000/api/v1/auth/avatar/abc123_avatar.jpg
 ```
 
 ---
 
-## 📦 Каталог (`/api/catalog`)
+## 📦 Каталог (`/api/v1/catalog`)
 
-### GET `/api/catalog/products`
+**Примечание:** Результаты поиска товаров и список категорий кэшируются для повышения производительности.
+
+### GET `/api/v1/catalog/products`
 Получение списка товаров с фильтрацией и сортировкой.
 
 **Параметры запроса:**
@@ -215,7 +282,7 @@ curl -X GET http://localhost:5000/api/auth/avatar/abc123_avatar.jpg
 
 **Пример запроса:**
 ```bash
-curl -X GET "http://localhost:5000/api/catalog/products?category=1&min_price=100&max_price=500&sort=price_asc&page=1"
+curl -X GET "http://localhost:5000/api/v1/catalog/products?category=1&min_price=100&max_price=500&sort=price_asc&page=1"
 ```
 
 **Ответ (200):**
@@ -240,13 +307,15 @@ curl -X GET "http://localhost:5000/api/catalog/products?category=1&min_price=100
 
 ---
 
-### GET `/api/catalog/categories`
+### GET `/api/v1/catalog/categories`
 Получение списка всех категорий.
 
 **Пример запроса:**
 ```bash
-curl -X GET http://localhost:5000/api/catalog/categories
+curl -X GET http://localhost:5000/api/v1/catalog/categories
 ```
+
+**Примечание:** Результат кэшируется на 5 минут.
 
 **Ответ (200):**
 ```json
@@ -264,12 +333,12 @@ curl -X GET http://localhost:5000/api/catalog/categories
 
 ---
 
-### GET `/api/catalog/products/<product_id>`
+### GET `/api/v1/catalog/products/<product_id>`
 Получение детальной информации о товаре.
 
 **Пример запроса:**
 ```bash
-curl -X GET http://localhost:5000/api/catalog/products/1
+curl -X GET http://localhost:5000/api/v1/catalog/products/1
 ```
 
 **Ответ (200):**
@@ -299,7 +368,7 @@ curl -X GET http://localhost:5000/api/catalog/products/1
 
 **Пример запроса:**
 ```bash
-curl -X GET http://localhost:5000/api/cart/ \
+curl -X GET http://localhost:5000/api/v1/cart/ \
   -b cookies.txt
 ```
 
@@ -323,7 +392,7 @@ curl -X GET http://localhost:5000/api/cart/ \
 
 ---
 
-### POST `/api/cart/add`
+### POST `/api/v1/cart/add`
 Добавление товара в корзину.
 
 **Формат запроса:** `application/json`
@@ -338,7 +407,7 @@ curl -X GET http://localhost:5000/api/cart/ \
 
 **Пример запроса:**
 ```bash
-curl -X POST http://localhost:5000/api/cart/add \
+curl -X POST http://localhost:5000/api/v1/cart/add \
   -H "Content-Type: application/json" \
   -d '{"product_id":1,"quantity":2}' \
   -c cookies.txt
@@ -355,12 +424,49 @@ curl -X POST http://localhost:5000/api/cart/add \
 ```
 
 **Ошибки:**
-- `400` - Недостающие поля или невалидные данные
-- `404` - Товар не найден
+
+**422 - Ошибка валидации:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Invalid product_id"
+  }
+}
+```
+
+**404 - Товар не найден:**
+```json
+{
+  "error": {
+    "type": "not_found",
+    "message": "Product not found"
+  }
+}
+```
+
+**422 - Товар закончился на складе:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Only 3 item(s) left in stock",
+    "details": {
+      "product_id": 1,
+      "available": 3
+    }
+  }
+}
+```
+
+**Edge Cases:**
+- Добавление товара с `quantity` больше чем `stock` → 422 с сообщением о доступном количестве
+- Добавление несуществующего товара → 404
+- Отрицательное `quantity` → 422
 
 ---
 
-### POST `/api/cart/remove`
+### POST `/api/v1/cart/remove`
 Удаление товара из корзины.
 
 **Формат запроса:** `application/json`
@@ -374,18 +480,27 @@ curl -X POST http://localhost:5000/api/cart/add \
 
 **Пример запроса:**
 ```bash
-curl -X POST http://localhost:5000/api/cart/remove \
+curl -X POST http://localhost:5000/api/v1/cart/remove \
   -H "Content-Type: application/json" \
   -d '{"product_id":1}' \
   -c cookies.txt
 ```
 
 **Ошибки:**
-- `400` - Недостающие поля или невалидные данные
+
+**422 - Ошибка валидации:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Invalid product_id"
+  }
+}
+```
 
 ---
 
-### POST `/api/cart/update`
+### POST `/api/v1/cart/update`
 Обновление количества товара в корзине.
 
 **Формат запроса:** `application/json`
@@ -400,7 +515,7 @@ curl -X POST http://localhost:5000/api/cart/remove \
 
 **Пример запроса:**
 ```bash
-curl -X POST http://localhost:5000/api/cart/update \
+curl -X POST http://localhost:5000/api/v1/cart/update \
   -H "Content-Type: application/json" \
   -d '{"product_id":1,"quantity":3}' \
   -c cookies.txt
@@ -409,21 +524,48 @@ curl -X POST http://localhost:5000/api/cart/update \
 **Примечание:** Если `quantity` равно 0 или меньше, товар удаляется из корзины.
 
 **Ошибки:**
-- `400` - Недостающие поля или невалидные данные
-- `404` - Товар не найден
+
+**422 - Ошибка валидации:**
+```json
+{
+  "error": {
+    "type": "validation_error",
+    "message": "Only 2 item(s) left in stock",
+    "details": {
+      "product_id": 1,
+      "available": 2
+    }
+  }
+}
+```
+
+**404 - Товар не найден:**
+```json
+{
+  "error": {
+    "type": "not_found",
+    "message": "Product not found"
+  }
+}
+```
+
+**Edge Cases:**
+- Обновление количества до 0 → товар удаляется из корзины
+- Обновление количества больше чем `stock` → 422
+- Обновление несуществующего товара → 404
 
 ---
 
-## 📋 Заказы (`/api/orders`)
+## 📋 Заказы (`/api/v1/orders`)
 
-### POST `/api/orders/create`
+### POST `/api/v1/orders/create`
 Создание заказа из текущей корзины.
 
 **Требуется авторизация:** Да
 
 **Пример запроса:**
 ```bash
-curl -X POST http://localhost:5000/api/orders/create \
+curl -X POST http://localhost:5000/api/v1/orders/create \
   -H "Authorization: Bearer <token>" \
   -c cookies.txt
 ```
@@ -442,20 +584,52 @@ curl -X POST http://localhost:5000/api/orders/create \
 - Автоматически создается уведомление о создании заказа
 
 **Ошибки:**
-- `400` - Корзина пуста или нет валидных товаров
-- `401` - Требуется авторизация
-- `404` - Пользователь не найден
+
+**400 - Корзина пуста:**
+```json
+{
+  "error": {
+    "type": "app_error",
+    "message": "Cart empty"
+  }
+}
+```
+
+**401 - Требуется авторизация:**
+```json
+{
+  "error": {
+    "type": "unauthorized",
+    "message": "Missing Authorization Header"
+  }
+}
+```
+
+**404 - Пользователь не найден:**
+```json
+{
+  "error": {
+    "type": "not_found",
+    "message": "User not found"
+  }
+}
+```
+
+**Edge Cases:**
+- Создание заказа без авторизации → 401
+- Создание заказа с пустой корзиной → 400
+- Создание заказа с товарами, которых больше нет на складе → количество автоматически ограничивается
 
 ---
 
-### GET `/api/orders/my`
+### GET `/api/v1/orders/my`
 Получение истории заказов текущего пользователя.
 
 **Требуется авторизация:** Да
 
 **Пример запроса:**
 ```bash
-curl -X GET http://localhost:5000/api/orders/my \
+curl -X GET http://localhost:5000/api/v1/orders/my \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -490,10 +664,38 @@ curl -X GET http://localhost:5000/api/orders/my \
 
 - `200` - Успешный запрос
 - `201` - Ресурс создан
-- `400` - Ошибка валидации данных
+- `400` - Ошибка запроса (например, пустая корзина)
 - `401` - Требуется авторизация или невалидный токен
 - `404` - Ресурс не найден
 - `409` - Конфликт (например, пользователь уже существует)
+- `422` - Ошибка валидации данных (неверный формат, недостающие поля)
+- `429` - Превышен лимит запросов (Rate Limit)
+- `503` - Сервис недоступен (например, проблемы с БД)
+
+## Формат ошибок
+
+Все ошибки возвращаются в едином формате:
+
+```json
+{
+  "error": {
+    "type": "validation_error | not_found | unauthorized | conflict | rate_limited | app_error",
+    "message": "Описание ошибки",
+    "details": {
+      // Опциональные детали (для validation_error)
+    }
+  }
+}
+```
+
+## Типы ошибок
+
+- `validation_error` (422) - Ошибка валидации входных данных
+- `not_found` (404) - Ресурс не найден
+- `unauthorized` (401) - Требуется авторизация или неверные учетные данные
+- `conflict` (409) - Конфликт (например, дублирование email)
+- `rate_limited` (429) - Превышен лимит запросов
+- `app_error` (400) - Общая ошибка приложения
 
 ---
 
@@ -503,7 +705,7 @@ curl -X GET http://localhost:5000/api/orders/my \
 
 ```javascript
 // Вход
-const loginResponse = await fetch('http://localhost:5000/api/auth/login', {
+const loginResponse = await fetch('http://localhost:5000/api/v1/auth/login', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -517,7 +719,7 @@ const loginResponse = await fetch('http://localhost:5000/api/auth/login', {
 const { access_token, user } = await loginResponse.json();
 
 // Получение данных пользователя
-const meResponse = await fetch('http://localhost:5000/api/auth/me', {
+const meResponse = await fetch('http://localhost:5000/api/v1/auth/me', {
   headers: {
     'Authorization': `Bearer ${access_token}`
   },
@@ -525,7 +727,7 @@ const meResponse = await fetch('http://localhost:5000/api/auth/me', {
 });
 
 // Добавление в корзину
-await fetch('http://localhost:5000/api/cart/add', {
+await fetch('http://localhost:5000/api/v1/cart/add', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',

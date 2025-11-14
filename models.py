@@ -12,9 +12,9 @@ class User(db.Model):
     password_hash = db.Column(db.String(200), nullable=False)
     avatar = db.Column(db.String(300))  # путь к файлу в static/avatars
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    orders = db.relationship("Order", backref="user", lazy=True)
+    orders = db.relationship("Order", backref="user", lazy="selectin")
     notifications = db.relationship(
-        "Notification", backref="user", lazy=True, cascade="all, delete-orphan"
+        "Notification", backref="user", lazy="selectin", cascade="all, delete-orphan"
     )
 
     def set_password(self, password):
@@ -41,7 +41,11 @@ class User(db.Model):
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), unique=True, nullable=False)
-    products = db.relationship("Product", backref="category", lazy=True)
+    products = db.relationship(
+        "Product",
+        backref=db.backref("category", lazy="selectin"),
+        lazy="selectin",
+    )
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -51,29 +55,37 @@ class Product(db.Model):
     price = db.Column(db.Numeric(10, 2), nullable=False)
     stock = db.Column(db.Integer, default=0)
     image = db.Column(db.String(300))  # путь или URL
-    category_id = db.Column(db.Integer, db.ForeignKey("category.id"), nullable=True)
+    category_id = db.Column(db.Integer, db.ForeignKey("category.id"), nullable=True, index=True)
 
 class Order(db.Model):
+    __table_args__ = (
+        db.Index("ix_order_user_created_at", "user_id", "created_at"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     # Используем Numeric(10, 2) вместо Float для точных денежных расчетов
     total = db.Column(db.Numeric(10, 2), nullable=False)
-    items = db.relationship("OrderItem", backref="order", lazy=True)
+    items = db.relationship("OrderItem", backref="order", lazy="selectin")
     status = db.Column(db.String(50), default="created")  # created, paid, shipped, cancelled
 
 class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False, index=True)
     quantity = db.Column(db.Integer, nullable=False)
     # Используем Numeric(10, 2) вместо Float для точных денежных расчетов
     price = db.Column(db.Numeric(10, 2), nullable=False)  # price at time of order
-    product = db.relationship("Product")
+    product = db.relationship("Product", lazy="selectin")
 
 class Notification(db.Model):
+    __table_args__ = (
+        db.Index("ix_notification_user_read", "user_id", "is_read"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
     message = db.Column(db.Text, nullable=False)
     type = db.Column(db.String(50), default="info")  # info, success, warning, error

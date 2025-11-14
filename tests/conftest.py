@@ -1,10 +1,13 @@
 """
 Конфигурация pytest для тестов Flask приложения.
 """
+import json
 import pytest
+from itsdangerous import URLSafeSerializer
 from app import create_app
 from models import db, User, Category, Product
 from decimal import Decimal
+from extensions import limiter
 
 
 @pytest.fixture
@@ -16,6 +19,9 @@ def app():
     app.config['SECRET_KEY'] = 'test-secret-key'
     app.config['JWT_SECRET_KEY'] = 'test-jwt-secret-key'
     app.config['IS_PRODUCTION'] = False
+    app.config['RATELIMIT_ENABLED'] = False
+    app.config['CACHE_TYPE'] = 'NullCache'  # Отключаем кэш в тестах
+    limiter.enabled = False
     
     with app.app_context():
         db.create_all()
@@ -90,11 +96,32 @@ def test_products(app, test_category):
 @pytest.fixture
 def auth_headers(client, test_user):
     """Возвращает заголовки авторизации для тестов."""
-    response = client.post('/api/auth/login', json={
+    response = client.post('/api/v1/auth/login', json={
         'email': 'test@example.com',
         'password': 'password123'
     })
     data = response.get_json()
     token = data['access_token']
     return {'Authorization': f'Bearer {token}'}
+
+
+@pytest.fixture
+def sign_cart_cookie(app):
+    """Возвращает функцию для генерации подписанной cookie корзины."""
+    def _sign(cart_dict):
+        signer = URLSafeSerializer(app.config['SECRET_KEY'])
+        return signer.dumps(json.dumps(cart_dict))
+
+    return _sign
+
+
+@pytest.fixture
+def set_signed_cart_cookie(client, sign_cart_cookie):
+    """Устанавливает подписанную cookie корзины в тестовом клиенте."""
+    def _set(cart_dict):
+        signed = sign_cart_cookie(cart_dict)
+        client.set_cookie("cart", signed)
+        return signed
+
+    return _set
 

@@ -1,11 +1,15 @@
 from flask import Blueprint, request, jsonify, current_app, send_from_directory
 from models import db, User, Notification
-from routes.utils import save_avatar, validate_email, validate_password
+from routes.utils import save_avatar
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from extensions import limiter
+from schemas import RegisterSchema, LoginSchema
+from errors import ConflictError, UnauthorizedError, NotFoundError
 
 auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.route("/register", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATE_LIMIT_AUTH"])
 def register():
     """
     Регистрация нового пользователя.
@@ -23,24 +27,18 @@ def register():
     Returns:
         JSON ответ с user_id (201) или ошибкой (400, 409)
     """
-    data = request.form.to_dict()
-    # ожидаем first_name, last_name, email, password; avatar optional (multipart/form-data)
-    email = data.get("email")
-    password = data.get("password")
-    first_name = data.get("first_name")
-    last_name = data.get("last_name")
-    
-    if not email or not password or not first_name or not last_name:
-        return jsonify({"msg":"Missing fields"}), 400
-    
-    if not validate_email(email):
-        return jsonify({"msg":"Invalid email format"}), 400
-    
-    if not validate_password(password):
-        return jsonify({"msg":"Password must be at least 6 characters long"}), 400
+    data = RegisterSchema().load(request.form.to_dict())
+    email = data["email"]
+    first_name = data["first_name"]
+    last_name = data["last_name"]
+    password = data["password"]
     
     if User.query.filter_by(email=email).first():
-        return jsonify({"msg":"User already exists"}), 409
+        current_app.logger.warning(
+            "user_register_conflict",
+            extra={"event": "user_register_conflict", "email": email},
+        )
+        raise ConflictError("User already exists")
 
     user = User(first_name=first_name, last_name=last_name, email=email)
     user.set_password(password)
@@ -54,9 +52,14 @@ def register():
 
     db.session.add(user)
     db.session.commit()
+    current_app.logger.info(
+        "user_registered",
+        extra={"event": "user_registered", "user_id": user.id, "email": user.email},
+    )
     return jsonify({"msg":"User created", "user_id": user.id}), 201
 
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit(lambda: current_app.config["RATE_LIMIT_AUTH"])
 def login():
     """
     Вход в систему (авторизация пользователя).
@@ -71,17 +74,20 @@ def login():
     Returns:
         JSON ответ с access_token и данными пользователя (200) или ошибкой (400, 401)
     """
-    data = request.get_json()
-    if not data or not data.get("email") or not data.get("password"):
-        return jsonify({"msg":"Missing credentials"}), 400
-    
-    email = data.get("email")
-    if not validate_email(email):
-        return jsonify({"msg":"Invalid email format"}), 400
-    user = User.query.filter_by(email=data["email"]).first()
+    data = LoginSchema().load(request.get_json() or {})
+    email = data["email"]
+    user = User.query.filter_by(email=email).first()
     if not user or not user.check_password(data["password"]):
-        return jsonify({"msg":"Bad email or password"}), 401
+        current_app.logger.warning(
+            "user_login_failed",
+            extra={"event": "user_login_failed", "email": email},
+        )
+        raise UnauthorizedError("Bad email or password")
     access_token = create_access_token(identity=str(user.id))
+    current_app.logger.info(
+        "user_login_success",
+        extra={"event": "user_login_success", "user_id": user.id, "email": user.email},
+    )
     return jsonify({"access_token": access_token, "user": {
         "id": user.id, "first_name": user.first_name, "last_name": user.last_name,
         "email": user.email, "avatar": user.avatar
@@ -103,7 +109,7 @@ def me():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
-        return jsonify({"msg":"User not found"}), 404
+        raise NotFoundError("User not found")
     # количество непрочитанных уведомлений
     unread_count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
     return jsonify({
@@ -168,7 +174,7 @@ def mark_notification_read(notification_id):
     user_id = get_jwt_identity()
     notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
     if not notification:
-        return jsonify({"msg":"Notification not found"}), 404
+        raise NotFoundError("Notification not found")
     notification.is_read = True
     db.session.commit()
     return jsonify({"msg":"Notification marked as read"}), 200

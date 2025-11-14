@@ -1,8 +1,10 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from decimal import Decimal
 from models import db, Order, OrderItem, Product, User, Notification
 from routes.cart import read_cart_from_cookie
+from sqlalchemy.orm import selectinload
+from errors import ValidationError, NotFoundError
 
 orders_bp = Blueprint("orders", __name__)
 
@@ -27,11 +29,19 @@ def create_order():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
-        return jsonify({"msg":"User not found"}), 404
+        current_app.logger.warning(
+            "order_create_user_not_found",
+            extra={"event": "order_create_user_not_found", "user_id": user_id},
+        )
+        raise NotFoundError("User not found")
     # Берём корзину из cookie (либо фронтенд пришлёт список)
     cart = read_cart_from_cookie()
     if not cart:
-        return jsonify({"msg":"Cart empty"}), 400
+        current_app.logger.warning(
+            "order_create_cart_empty",
+            extra={"event": "order_create_cart_empty", "user_id": user_id},
+        )
+        raise ValidationError("Cart is empty")
 
     total = Decimal('0.00')
     items = []
@@ -39,8 +49,17 @@ def create_order():
         product = Product.query.get(pid)
         if not product:
             continue
-        if product.stock is not None and qty > product.stock:
-            qty = product.stock
+        if product.stock is not None:
+            if product.stock <= 0:
+                raise ValidationError(
+                    "Product is out of stock",
+                    details={"product_id": product.id, "available": 0},
+                )
+            if qty > product.stock:
+                raise ValidationError(
+                    "Insufficient stock for product",
+                    details={"product_id": product.id, "available": product.stock},
+                )
         # Преобразуем цену в Decimal если это не Decimal
         price = Decimal(str(product.price))
         line_total = price * qty
@@ -48,7 +67,11 @@ def create_order():
         items.append((product, qty, price))
 
     if not items:
-        return jsonify({"msg":"No valid items to order"}), 400
+        current_app.logger.warning(
+            "order_create_no_valid_items",
+            extra={"event": "order_create_no_valid_items", "user_id": user_id},
+        )
+        raise ValidationError("No valid items to order")
 
     # Округляем до 2 знаков после запятой для сохранения в БД
     order = Order(user_id=user_id, total=total.quantize(Decimal('0.01')))
@@ -71,6 +94,16 @@ def create_order():
     )
     db.session.add(notification)
     db.session.commit()
+    current_app.logger.info(
+        "order_created",
+        extra={
+            "event": "order_created",
+            "order_id": order.id,
+            "user_id": user_id,
+            "item_count": len(items),
+            "total": float(order.total),
+        },
+    )
 
     # очистить cookie корзины — фронтенд должен удалить cookie или сервер может отправить инструкцию
     resp = jsonify({"msg":"Order created", "order_id": order.id})
@@ -92,7 +125,14 @@ def my_orders():
         или ошибка авторизации (401)
     """
     user_id = get_jwt_identity()
-    orders = Order.query.filter_by(user_id=user_id).order_by(Order.created_at.desc()).all()
+    orders = (
+        Order.query.options(
+            selectinload(Order.items).selectinload(OrderItem.product)
+        )
+        .filter_by(user_id=user_id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
     data = []
     for o in orders:
         items = [{

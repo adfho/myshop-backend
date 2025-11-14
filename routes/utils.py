@@ -67,19 +67,23 @@ def validate_email(email):
 
 def validate_password(password):
     """
-    Проверяет минимальную длину пароля.
+    Проверяет сложность пароля.
     
-    Проверяет что пароль содержит не менее 6 символов.
+    Требует минимум 6 символов, наличия букв и цифр.
     
     Args:
         password (str): Пароль для проверки
         
     Returns:
-        bool: True если пароль валиден (>= 6 символов), False если нет или пустой
+        bool: True если пароль валиден, False если нет или пустой
     """
     if not password:
         return False
-    return len(password) >= 6
+    if len(password) < 6:
+        return False
+    has_alpha = any(ch.isalpha() for ch in password)
+    has_digit = any(ch.isdigit() for ch in password)
+    return has_alpha and has_digit
 
 def validate_positive_number(value, field_name="value"):
     """

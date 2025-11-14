@@ -2,8 +2,9 @@ from flask import Blueprint, request, jsonify, make_response, current_app
 import json
 from decimal import Decimal
 from models import Product
-from routes.utils import validate_integer
 from itsdangerous import URLSafeSerializer, BadSignature
+from schemas import CartAddSchema, CartUpdateSchema, CartRemoveSchema
+from errors import ValidationError, NotFoundError
 
 cart_bp = Blueprint("cart", __name__)
 
@@ -135,6 +136,22 @@ def get_cart():
     cart = read_cart_from_cookie()
     return jsonify(cart_response(cart)), 200
 
+def _ensure_stock(product: Product, requested: int, current_in_cart: int = 0):
+    if product.stock is None:
+        return
+    available = product.stock - current_in_cart
+    if available <= 0:
+        raise ValidationError(
+            "Product is out of stock",
+            details={"product_id": product.id, "available": 0},
+        )
+    if requested > available:
+        raise ValidationError(
+            f"Only {available} item(s) left in stock",
+            details={"product_id": product.id, "available": available},
+        )
+
+
 @cart_bp.route("/add", methods=["POST"])
 def add_to_cart():
     """
@@ -152,30 +169,16 @@ def add_to_cart():
         JSON ответ с обновленной корзиной (200) или ошибкой (400, 404)
     """
     # body: { "product_id": 1, "quantity": 2 }
-    data = request.get_json()
-    if not data or "product_id" not in data:
-        return jsonify({"msg":"Missing product_id"}), 400
-    
-    # валидация product_id
-    is_valid, pid = validate_integer(data.get("product_id"), "product_id", min_value=1)
-    if not is_valid:
-        return jsonify({"msg": pid if isinstance(pid, str) else "Invalid product_id"}), 400
-    pid = int(pid)
-    
-    # валидация quantity
-    qty = data.get("quantity", 1)
-    is_valid, qty = validate_integer(qty, "quantity", min_value=1)
-    if not is_valid:
-        return jsonify({"msg": qty if isinstance(qty, str) else "Invalid quantity"}), 400
-    qty = int(qty)
+    data = CartAddSchema().load(request.get_json() or {})
+    pid = data["product_id"]
+    qty = data["quantity"]
     product = Product.query.get(pid)
     if not product:
-        return jsonify({"msg":"Product not found"}), 404
+        raise NotFoundError("Product not found")
     cart = read_cart_from_cookie()
-    cart[pid] = cart.get(pid, 0) + qty
-    # можно ограничить по stock
-    if product.stock is not None and cart[pid] > product.stock:
-        cart[pid] = product.stock
+    current_qty = cart.get(pid, 0)
+    _ensure_stock(product, qty, current_in_cart=current_qty)
+    cart[pid] = current_qty + qty
     resp = make_response(jsonify(cart_response(cart)), 200)
     set_cart_cookie(resp, cart)
     return resp
@@ -194,14 +197,8 @@ def remove_from_cart():
     Returns:
         JSON ответ с обновленной корзиной (200) или ошибка (400)
     """
-    data = request.get_json()
-    if not data or "product_id" not in data:
-        return jsonify({"msg":"Missing product_id"}), 400
-    
-    is_valid, pid = validate_integer(data.get("product_id"), "product_id", min_value=1)
-    if not is_valid:
-        return jsonify({"msg": pid if isinstance(pid, str) else "Invalid product_id"}), 400
-    pid = int(pid)
+    data = CartRemoveSchema().load(request.get_json() or {})
+    pid = data["product_id"]
     cart = read_cart_from_cookie()
     if pid in cart:
         cart.pop(pid)
@@ -224,30 +221,17 @@ def update_cart():
     Returns:
         JSON ответ с обновленной корзиной (200) или ошибкой (400, 404)
     """
-    data = request.get_json()
-    # body: { "product_id":1, "quantity":3 }
-    if not data or "product_id" not in data or "quantity" not in data:
-        return jsonify({"msg":"Missing fields"}), 400
-    
-    is_valid, pid = validate_integer(data.get("product_id"), "product_id", min_value=1)
-    if not is_valid:
-        return jsonify({"msg": pid if isinstance(pid, str) else "Invalid product_id"}), 400
-    pid = int(pid)
-    
-    is_valid, qty = validate_integer(data.get("quantity"), "quantity", min_value=0)
-    if not is_valid:
-        return jsonify({"msg": qty if isinstance(qty, str) else "Invalid quantity"}), 400
-    qty = int(qty)
+    data = CartUpdateSchema().load(request.get_json() or {})
+    pid = data["product_id"]
+    qty = data["quantity"]
     product = Product.query.get(pid)
     if not product:
-        return jsonify({"msg":"Product not found"}), 404
+        raise NotFoundError("Product not found")
     cart = read_cart_from_cookie()
     if qty <= 0:
         cart.pop(pid, None)
     else:
-        # check stock
-        if product.stock is not None and qty > product.stock:
-            qty = product.stock
+        _ensure_stock(product, qty)
         cart[pid] = qty
     resp = make_response(jsonify(cart_response(cart)), 200)
     set_cart_cookie(resp, cart)

@@ -14,6 +14,7 @@ app.db
 *.db
 
 static/avatars/*
+logs/
 
 # Миграции (опционально - можно коммитить)
 # migrations/
